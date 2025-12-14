@@ -64,6 +64,7 @@ class Value:
     def __repr__(self):
         return f"Value(data {self.data})"
     def __add__(self, other):
+        other = other if isinstance(other,Value) else Value(other)  
         out = Value(self.data + other.data ,  (self, other), _op='+')
         def _backward():
             self.grad += 1.0 * out.grad
@@ -71,7 +72,21 @@ class Value:
         out._backward = _backward
         return out
     
+    def __pow__(self,other):
+        assert isinstance(other, (int, float)), "only supporting int/float"
+        out = Value(self.data ** other, (self, ) f"**{other}")
+        def _backward():
+            self.grad = other* (self.data ** (other - 1)) * out.grad
+        out._backward = _backward
+    
+    def __rmul__(self,other):
+        return self * other
+    
+    def __truediv__(self,other):
+        return self * other**-1
+
     def __mul__(self, other):
+        other = other if isinstance(other,Value) else Value(other)
         out = Value(self.data * other.data, (self, other), _op='*')
         def _backward():
             self.grad += other.data * out.grad
@@ -85,6 +100,15 @@ class Value:
         out = Value(t, (self,) , 'tanh')
         def _backward():
             self.grad += (1 - t**2) * out.grad
+        out._backward = _backward
+        return out
+    
+
+    def exp(self):
+        x = self.data
+        out = Value(math.exp(x), (self, ) , 'exp')
+        def _backward():
+            self.grad += out.data * out.grad
         out._backward = _backward
         return out
     
@@ -214,7 +238,7 @@ x2 = Value(0.0, label='x2')
 w1 = Value(-3.0, label='w1')
 w2 = Value(1.0, label='w2')
 #bias
-b = Value(6.73564758609708 , label='b')
+b = Value(2 , label='b')
 #x1*w1 + x2*w2 + b
 x1w1 = x1*w1
 x1w1.label = 'x1w1'
@@ -224,7 +248,7 @@ x1w1x2w2 = x1w1 + x2w2
 x1w1x2w2.label = 'x1*w1 + x2*w2'
 n = x1w1x2w2 + b
 n.label= 'n'
-
+print(b.exp())
 o = n.tanh()
 o.label='o'
 
@@ -264,5 +288,5 @@ o.label='o'
 #     i._backward()
 #     # print(i)
 o.backward()
-dot = draw_dot(o)
-dot.render('graph', view=True)  
+# dot = draw_dot(o)
+# dot.render('graph', view=True)  
