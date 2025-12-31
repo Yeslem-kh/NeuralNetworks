@@ -71,13 +71,20 @@ class Value:
             other.grad += 1.0 * out.grad
         out._backward = _backward
         return out
+    def __radd__(self,other):
+        return self + other
+    def __neg__(self):
+        return (-1 * self)
+    def __sub__(self, other):
+        return self + (-1 * other)
     
     def __pow__(self,other):
         assert isinstance(other, (int, float)), "only supporting int/float"
-        out = Value(self.data ** other, (self, ) f"**{other}")
+        out = Value(self.data ** other, (self, ) ,f"**{other}")
         def _backward():
             self.grad = other* (self.data ** (other - 1)) * out.grad
         out._backward = _backward
+        return out
     
     def __rmul__(self,other):
         return self * other
@@ -248,8 +255,12 @@ x1w1x2w2 = x1w1 + x2w2
 x1w1x2w2.label = 'x1*w1 + x2*w2'
 n = x1w1x2w2 + b
 n.label= 'n'
-print(b.exp())
-o = n.tanh()
+# print(b.exp())
+#---
+e = (2*n).exp()
+o = (e-1) / (e+1)
+
+#---
 o.label='o'
 
 # o.grad = 1.0
@@ -288,5 +299,98 @@ o.label='o'
 #     i._backward()
 #     # print(i)
 o.backward()
-# dot = draw_dot(o)
+
+#-------------------------------------
+#===============PyTorch==============
+#------------------------------------
+# import torch
+import numpy as np
+
+
+class Neuron:
+    def __init__(self,nin):
+        self.w = [Value(np.random.uniform(-1,1)) for _ in range(nin)]
+        self.b = Value(np.random.uniform(-1,1))
+    def __call__(self,x):
+        act = sum((wi*xi for wi,xi, in zip(self.w,x)),self.b)
+        out = act.tanh()
+        return out
+    def parameters(self):
+        return self.w + [self.b]
+class Layer:
+    def __init__(self,nin,nout):
+        self.neurons = [Neuron(nin) for _ in range(nout)]
+    def __call__(self, x):
+        outs = [n(x) for n in self.neurons]
+        return outs[0] if len(outs) == 1 else outs
+    def parameters(self):
+        return [p for neuron in self.neurons for p in neuron.parameters()]
+class MLP:
+    def __init__(self,nin,nouts):
+        sz = [nin] + nouts
+        self.layers = [Layer(sz[i], sz[i+1]) for i in range(len(nouts))]
+    def __call__(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+    def parameters(self):
+        return [p for layer in self.layers for p in layer.parameters()]
+
+
+
+
+
+
+x = [2.0,3.0,-1.0]
+n =MLP(3, [4,4,1])
+# n(x)
+xs =[
+    [2.0,3.0,-1.0],
+    [3.0,-1.0,0.5],
+    [0.5,1.0,1.0],
+    [1.0,1.0,-1.0]
+]
+ys = [1.0,-1.0,-1.0,1.0] #desired targets
+ypred = [n(x) for x in xs]
+# # print(ypred)
+# # print(len(n.parameters()))
+
+# ypred = [n(x) for x in xs]
+# loss = sum((yout - ygt)**2 for ygt,yout in zip(ys,ypred))
+# # print(loss)
+
+# ypred = [n(x) for x in xs]
+# loss = sum((yout - ygt)**2 for ygt,yout in zip(ys,ypred))
+# for p in n.parameters():
+#     p.grad = 0.0
+# loss.backward()
+# for p in n.parameters():
+#     p.data += -0.1 * p.grad
+# loss.backward()
+# print(loss)
+
+
+# print(ypred)
+# The Training Loop
+for i in range(1000):
+    #forward pass
+    ypred = [n(x) for x in xs]
+    loss = sum((yout - ygt)**2 for ygt, yout in zip(ys, ypred))
+
+    for p in n.parameters():
+        p.grad = 0.0
+    loss.backward()
+    
+    learning_rate = -0.09
+    for p in n.parameters():
+        p.data += learning_rate * p.grad
+    
+    print(f"Iteration {i} | Loss: {loss.data}") 
+print(ypred)
+# print(n.layers[0].neurons[0].w[0].grad)
+# print(n.parameters())
+
+
+
+# dot = draw_dot(loss)
 # dot.render('graph', view=True)  
